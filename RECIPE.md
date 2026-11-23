@@ -1,4 +1,4 @@
-# Kanban
+# Nightshift
 
 A board pane for one git repo. Each card is a task for a coding agent: pick an `hc`
 template, press Run, and the agent works in its own git worktree while the card moves
@@ -23,7 +23,7 @@ Top to bottom, on `surface`, 10px padding, 8px gaps:
   "Done". Each is a `canvas` panel, 8px radius, 6px padding, scrolling vertically, titled
   "<Name> · <count>" at 11.5px semibold `muted`.
 - **Cards:** `raised` fill, 7px radius, 1px `border` outline, 8px padding. The task text
-  at 12.5px; under it a 10.5px `dim` line: template, branch (`kb/<id>`) once started, and
+  at 12.5px; under it a 10.5px `dim` line: template, branch (`ns/<id>`) once started, and
   the agent's status word in that status's theme color. Below that, small buttons
   (11px, 1px `input` border, 5px radius, `hover` fill on hover).
 
@@ -34,13 +34,13 @@ Top to bottom, on `surface`, 10px padding, 8px gaps:
 - **To do card:** a template button (accent; cycles that card's template), **Run**, and
   **✕** (delete, `dim`).
 - **Run:** the card goes to Running at once. In a git repo the mod runs
-  `git worktree add -b kb/<id> <worktrees>/<repo>/kb-<id>` (`<worktrees>`: the
+  `git worktree add -b ns/<id> <worktrees>/<repo>/ns-<id>` (`<worktrees>`: the
   `worktrees.directory` setting, default `~/.herdr/worktrees`), then
-  `hc run --bg --json --name kb-<id> --cwd <worktree> <template> "<task>\n\nWork only in
+  `hc run --bg --json --name ns-<id> --cwd <worktree> <template> "<task>\n\nWork only in
   <worktree>. Commit your changes on the current branch when done."`, and stores the
   returned terminal address. Outside git it runs in the folder itself. A failure puts the
   card back in To do and shows the error as a line and a notification.
-- **Running card:** status comes live from `terminals()` by the name `kb-<id>`.
+- **Running card:** status comes live from `terminals()` by the name `ns-<id>`.
   `working` shows in the working color; `blocked` turns the card border `blocked` and
   the word "needs you". **Open** (while the terminal lives) peeks at it
   (`terminal.peek`); **Stop** (`dim`) kills it and puts the card back in To do.
@@ -48,10 +48,10 @@ Top to bottom, on `surface`, 10px padding, 8px gaps:
   its first turn, or its terminal is gone; the 3 s timer saves that move. Buttons:
   **Open** (while the terminal lives), **Done** (kills the terminal, card to Done),
   **Back** (`dim`, kills the terminal, card to To do). Run again reuses the card's
-  worktree, or its existing `kb/<id>` branch.
+  worktree, or its existing `ns/<id>` branch.
 - **Done card:** only **✕**.
 - The board re-reads its file every 3 s and redraws when another program changed it.
-  `herdr-app do kanban.run` starts the oldest To do card.
+  `herdr-app do nightshift.run` starts the oldest To do card.
 - **Drag:** press a card and move it more than 5px to pick it up. The card fades to 35%,
   a 240px ghost (`raised`, `accent` border) follows the pointer, and every column shows
   what dropping there does: an `accent` border and label when allowed, a `blocked` border
@@ -68,7 +68,7 @@ Top to bottom, on `surface`, 10px padding, 8px gaps:
   are Done. **Unchain** clears it.
 - **Merge into <branch>** (Review, when the card has a branch): refuses if
   `git status --porcelain --untracked-files=no` is not empty; runs
-  `git merge --no-ff --no-edit kb/<id>`; on failure `git merge --abort` and shows why. On
+  `git merge --no-ff --no-edit ns/<id>`; on failure `git merge --abort` and shows why. On
   success the card goes to Done, marked "merged" in `done` color.
 - **Clean up** (Done, while it has a worktree or branch): `git worktree remove` then
   `git branch -d`, never forced; each refusal is shown and keeps what git kept.
@@ -91,11 +91,11 @@ Top to bottom, on `surface`, 10px padding, 8px gaps:
 
 ## Built from
 
-- One mod, `mods/kanban/` (`main.js`, `mod.json` with `"place": "none"`), opened as a tab
-  or split: `tab.new {mod: "kanban", props: {folder?}}`. Without `props.folder` it uses
+- One mod, `mods/nightshift/` (`main.js`, `mod.json` with `"place": "none"`), opened as a tab
+  or split: `tab.new {mod: "nightshift", props: {folder?}}`. Without `props.folder` it uses
   `focused().cwd`, else the active space's folder, else `home()`.
 - Repo root from `exec("git", ["rev-parse", "--show-toplevel"])`. Cards are stored in
-  `<root>/.herdr/kanban.json` as `{"cards": [{id, task, template, status, terminal?,
+  `<root>/.herdr/nightshift.json` as `{"cards": [{id, task, template, status, terminal?,
   branch?, worktree?}]}`, where `status` is `todo | running | review | done` and `id` is
   `Date.now().toString(36)`.
 - `herdr` calls: `exec`, `hc(["templates", "--json"])`, `hc(["run", ...])`,
@@ -103,17 +103,17 @@ Top to bottom, on `surface`, 10px padding, 8px gaps:
   `focused()`, `spaces()`, `home()`, `notify`, `nextCommand`, `checking`, `theme`, and
   `run("terminal.peek")` / `run("terminal.kill")`. `InputState` + `Input` from
   `gpui-base` for the input.
-- Card ids must match `^[a-z0-9_-]{1,24}$` (hc's `--name` limit minus `kb-`); cards
+- Card ids must match `^[a-z0-9_-]{1,24}$` (hc's `--name` limit minus `ns-`); cards
   with a bad id, task or status are skipped with an error line. A template not in
   `hc templates` fails at Run.
 - Programs run: `git`, `mkdir`, `test`, `hc`.
-- Pure rules in `mods/kanban/logic.js` (no Herdr imports): `parseCards`, `mergeCards`,
+- Pure rules in `mods/nightshift/logic.js` (no Herdr imports): `parseCards`, `mergeCards`,
   `waitingOn`, `isReady`, `columnFor`, `dropAction`, `applyDrop`, `nextOf`. Tested with
   `node --test` in `test/logic.test.js`.
 - Drag is built from `on_mouse_down` on cards, `on_mouse_move` on the board, columns and
   cards (`local_position` and `bounds` for the half), `on_mouse_up` and `on_hover(false)`
   on the board, and an `absolute()` ghost; gpui-kit has no element drag and drop.
-- `keys.json` binds `alt-shift-b` to `tab.new {mod: "kanban", name: "board"}`.
+- `keys.json` binds `alt-shift-b` to `tab.new {mod: "nightshift", name: "nightshift"}`.
 
 ## Watch out
 
@@ -131,25 +131,25 @@ Top to bottom, on `surface`, 10px padding, 8px gaps:
 - Guard `init` with `checking()`: `herdr-app check` runs it for real.
 - `hc` must be on the PATH Herdr starts programs with. With no templates the board
   falls back to `gemini`.
-- `kanban.run` reaches every open board copy.
+- `nightshift.run` reaches every open board copy.
 - It does not merge branches, remove worktrees, or chain cards.
-- Before `hc run`, `hc kill kb-<id>`: a helper stopped a moment ago may still hold the name.
+- Before `hc run`, `hc kill ns-<id>`: a helper stopped a moment ago may still hold the name.
 - Run again from Review sets the card back to To do first, so `isReady` lets it start.
-- `kanban.run` drops the first ready To do card on Running, so it may queue.
+- `nightshift.run` drops the first ready To do card on Running, so it may queue.
 - Saving keeps `maxRunning`, `timeoutMinutes` and `autoMerge` beside `cards` (defaults left
   out); a merge after a stale write keeps ours.
 
 ## Done when
 
-- `herdr-app check mods/kanban` passes.
+- `herdr-app check mods/nightshift` passes.
 - Opened on a git repo, the board shows the repo path and every `hc` template on the
   template button.
-- A card added and Run creates `<worktrees>/<repo>/kb-<id>` on branch `kb/<id>`,
+- A card added and Run creates `<worktrees>/<repo>/ns-<id>` on branch `ns/<id>`,
   shows in Running with the agent's live status, and lands in Review when the agent
-  stops, with the agent's commit on `kb/<id>`.
-- A card written into `.herdr/kanban.json` by another program appears within 3 s.
+  stops, with the agent's commit on `ns/<id>`.
+- A card written into `.herdr/nightshift.json` by another program appears within 3 s.
 - Done closes the agent's terminal; Back then Run reuses the same worktree.
-- A broken `.herdr/kanban.json` stays untouched and the board shows why.
+- A broken `.herdr/nightshift.json` stays untouched and the board shows why.
 - `npm test` passes.
 - Dragging a waiting card to Running is refused with its reason; dragging a Running card
   to Review stops its agent; dropping in To do above another card changes the order.

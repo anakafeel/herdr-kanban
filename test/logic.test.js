@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseCards, mergeCards, waitingOn, isReady, columnFor, nextOf, dropAction, applyDrop, mergeFailure, startable, isTimedOut, shouldAutoMerge } from "../mods/kanban/logic.js";
+import { parseCards, mergeCards, waitingOn, isReady, columnFor, nextOf, dropAction, applyDrop, mergeFailure, startable, isTimedOut, shouldAutoMerge } from "../mods/nightshift/logic.js";
 
 const card = (id, status = "todo", extra = {}) => ({ id, task: `t ${id}`, template: "gemini", status, ...extra });
 
@@ -131,11 +131,11 @@ test("applyDrop moves Review back to To do at the drop point, and refuses Runnin
 });
 
 test("mergeFailure names conflicts and git's own reason", () => {
-  assert.match(mergeFailure("Auto-merging a.txt\nCONFLICT (content): Merge conflict in a.txt\n", "kb/a"), /kb\/a conflicts/);
+  assert.match(mergeFailure("Auto-merging a.txt\nCONFLICT (content): Merge conflict in a.txt\n", "ns/a"), /ns\/a conflicts/);
   assert.equal(
-    mergeFailure("\n*** Please tell me who you are.\n\nfatal: unable to auto-detect email address (got 'x@y.(none)')\n", "kb/a"),
-    "Merge of kb/a failed, nothing changed: unable to auto-detect email address (got 'x@y.(none)')");
-  assert.equal(mergeFailure("", "kb/a"), "Merge of kb/a failed, nothing changed: git gave no reason");
+    mergeFailure("\n*** Please tell me who you are.\n\nfatal: unable to auto-detect email address (got 'x@y.(none)')\n", "ns/a"),
+    "Merge of ns/a failed, nothing changed: unable to auto-detect email address (got 'x@y.(none)')");
+  assert.equal(mergeFailure("", "ns/a"), "Merge of ns/a failed, nothing changed: git gave no reason");
 });
 
 test("parseCards reads timeoutMinutes and autoMerge", () => {
@@ -157,7 +157,7 @@ test("isTimedOut only for running cards past the limit", () => {
 });
 
 test("shouldAutoMerge only for cards that finished on their own, once", () => {
-  const done = card("a", "review", { branch: "kb/a", finished: true });
+  const done = card("a", "review", { branch: "ns/a", finished: true });
   assert.equal(shouldAutoMerge(done, true), true);
   assert.equal(shouldAutoMerge(done, false), false);
   assert.equal(shouldAutoMerge({ ...done, finished: false }, true), false); // stopped or timed out

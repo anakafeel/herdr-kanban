@@ -1,5 +1,5 @@
 {
   "global": {
-    "alt-shift-b": { "command": "tab.new", "args": { "mod": "kanban", "name": "board" } }
+    "alt-shift-b": { "command": "tab.new", "args": { "mod": "nightshift", "name": "nightshift" } }
   }
 }

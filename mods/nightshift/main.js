@@ -1,6 +1,6 @@
-// Kanban board for hc helpers. Cards live in <repo>/.herdr/kanban.json.
-// Run: starts `hc run --bg <template> <task>` in a git worktree (kb/<id>), named kb-<id>.
-// Open as a tab: herdr-app do tab.new '{"mod":"kanban"}'  (props.folder optional)
+// Nightshift: a queue of coding agents with a Kanban board UI. Cards live in <repo>/.herdr/nightshift.json.
+// Run: starts `hc run --bg <template> <task>` in a git worktree (ns/<id>), named ns-<id>.
+// Open as a tab: herdr-app do tab.new '{"mod":"nightshift"}'  (props.folder optional)
 // Agents can add cards by editing the JSON file; the board re-reads it every 3 s.
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
@@ -35,7 +35,7 @@ export default class Kanban extends View {
         const top = await exec("git", ["rev-parse", "--show-toplevel"], { cwd: folder }).catch(() => null);
         this.git = top?.code === 0;
         this.root = this.git ? top.stdout.trim() : folder;
-        this.file = `${this.root}/.herdr/kanban.json`;
+        this.file = `${this.root}/.herdr/nightshift.json`;
         const t = await hc(["templates", "--json"]).catch(() => null);
         try {
           const names = JSON.parse(t.stdout).templates.map((x) => x.name);
@@ -63,7 +63,7 @@ export default class Kanban extends View {
       this.schedule(cx);
       cx.notify();
     }));
-    // `herdr-app do kanban.run` starts the oldest To do card that waits for nothing.
+    // `herdr-app do nightshift.run` starts the oldest To do card that waits for nothing.
     cx.spawn(async (cx) => {
       for (;;) {
         const c = await nextCommand();
@@ -222,7 +222,7 @@ export default class Kanban extends View {
     });
   }
 
-  // Merges kb/<id> into the checked-out branch. Never with uncommitted changes; aborts on conflict.
+  // Merges ns/<id> into the checked-out branch. Never with uncommitted changes; aborts on conflict.
   merge(id, cx) {
     this.gitAction(id, cx, async () => {
       const opts = { cwd: this.root };
@@ -424,7 +424,7 @@ export default class Kanban extends View {
       })
       .on_hover((hovered, cx) => { if (!hovered && this.drag) { this.press = this.drag = this.over = null; cx.notify(); } })
       .child(h_flex().gap(8).items_center()
-        .child(div().text_size(14).font_semibold().child("Kanban"))
+        .child(div().text_size(14).font_semibold().child("Nightshift"))
         .child(div().flex_1().truncate().text_size(11).text_color(t.dim).child(this.root ?? ""))
         .child(btn("max", `max running ${this.maxRunning ?? "∞"}`, (cx) => {
           this.maxRunning = nextOf([null, 1, 2, 3, 4], this.maxRunning);

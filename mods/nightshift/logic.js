@@ -3,9 +3,9 @@
 export const COLUMNS = [["todo", "To do"], ["running", "Running"], ["review", "Review"], ["done", "Done"]];
 // "queued" is a card waiting in Running for a free slot or for the cards it waits on.
 const STATUSES = new Set([...COLUMNS.map(([k]) => k), "queued"]);
-export const ID = /^[a-z0-9_-]{1,24}$/; // hc --name takes 1-32 of a-z 0-9 - _, and "kb-" uses 3
-export const helperName = (id) => `kb-${id}`;
-export const branchName = (id) => `kb/${id}`;
+export const ID = /^[a-z0-9_-]{1,24}$/; // hc --name takes 1-32 of a-z 0-9 - _, and "ns-" uses 3
+export const helperName = (id) => `ns-${id}`;
+export const branchName = (id) => `ns/${id}`;
 
 const positive = (n) => (Number.isInteger(n) && n > 0 ? n : null);
 

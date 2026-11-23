@@ -1,11 +1,11 @@
-# herdr-kanban
+# herdr-nightshift
 
-**A queue for your coding agents, inside [Herdr](https://herdr.dev).** Line up a batch of
-cards, walk away, and come back to a Review column: herdr-kanban runs them N at a time, in
-order, each in its own git worktree, on the agent you pick per card. A local model takes the
-easy ones, Claude the hard ones.
+**Your coding agents work the night shift.** Line up a batch of cards in
+[Herdr](https://herdr.dev), walk away, and come back to a Review column: herdr-nightshift runs
+them N at a time, in order, each in its own git worktree, on the agent you pick per card. A local
+model takes the easy ones, Claude the hard ones. You drive it from a drag-and-drop Kanban board.
 
-![herdr-kanban: line up the cards, your agents work the queue](launch.gif)
+![herdr-nightshift: queue the cards, your agents work the night shift](launch.gif)
 
 **A real run**, recorded in Herdr: three cards, Gemini and Copilot agents, a queued card that
 starts by itself, merged into `main`.
@@ -23,7 +23,7 @@ starts by itself, merged into `main`.
   "timed out", so one stuck card can't hold the queue.
 - **Auto-merge** (off by default). A card whose agent finished on its own merges into your
   branch; a conflict aborts cleanly and leaves the card in Review for you.
-- **Isolated.** Each card works in its own worktree on `kb/<id>`, never in your checkout.
+- **Isolated.** Each card works in its own worktree on `ns/<id>`, never in your checkout.
 - **Watchable.** Agents are ordinary herdr-core terminals: open one mid-task, steer it, take over.
 
 Inspired by [Vibe Kanban](https://github.com/BloopAI/vibe-kanban), but native to Herdr and
@@ -31,14 +31,14 @@ built around running a queue of work, not one card at a time.
 
 ## Install
 
-Ask your agent in Herdr: *"add the herdr-mod from github.com/anakafeel/herdr-kanban"*.
+Ask your agent in Herdr: *"add the herdr-mod from github.com/anakafeel/herdr-nightshift"*.
 
 Or by hand:
 
 ```sh
-git clone https://github.com/anakafeel/herdr-kanban
-cp -r herdr-kanban/mods/kanban ~/.config/herdr-app/mods/
-herdr-app check ~/.config/herdr-app/mods/kanban
+git clone https://github.com/anakafeel/herdr-nightshift
+cp -r herdr-nightshift/mods/nightshift ~/.config/herdr-app/mods/
+herdr-app check ~/.config/herdr-app/mods/nightshift
 ```
 
 Then add the shortcut from [`keys.json`](keys.json) to your `~/.config/herdr-app/keys.json`
@@ -49,9 +49,9 @@ Then add the shortcut from [`keys.json`](keys.json) to your `~/.config/herdr-app
 Press `alt-shift-b`, or open a board for the repo of the focused terminal:
 
 ```sh
-herdr-app do tab.new '{"mod":"kanban"}'
+herdr-app do tab.new '{"mod":"nightshift"}'
 # or a specific repo:
-herdr-app do tab.new '{"mod":"kanban","props":{"folder":"/path/to/repo"}}'
+herdr-app do tab.new '{"mod":"nightshift","props":{"folder":"/path/to/repo"}}'
 ```
 
 **Drag cards between columns.** While you drag, each column says what dropping there
@@ -87,23 +87,23 @@ Every move also has a button on the card:
   isn't merged, and the board tells you which.
 - A card border in your theme's "blocked" color means its agent needs you.
 
-Agents work in `<worktrees>/<repo>/kb-<id>` on branch `kb/<id>`. `<worktrees>` is Herdr's
+Agents work in `<worktrees>/<repo>/ns-<id>` on branch `ns/<id>`. `<worktrees>` is Herdr's
 `worktrees.directory` setting, `~/.herdr/worktrees` by default. The worktree branches from
 your current commit, so commit first: the agent does not see uncommitted changes.
 
-Cards live in `<repo>/.herdr/kanban.json` (`{"maxRunning"?: n, "timeoutMinutes"?: n, "autoMerge"?: true, "cards": [{id, task, template, status, after?}]}`).
+Cards live in `<repo>/.herdr/nightshift.json` (`{"maxRunning"?: n, "timeoutMinutes"?: n, "autoMerge"?: true, "cards": [{id, task, template, status, after?}]}`).
 The board re-reads it every 3 s, so an orchestrating agent can plan work by writing cards
-into it, with `after` for order. `herdr-app do kanban.run` starts (or queues) the first ready To-do card
+into it, with `after` for order. `herdr-app do nightshift.run` starts (or queues) the first ready To-do card
 on every open board, so keep one board per repo.
 
 ## What it runs
 
-This mod runs programs on your machine: `git` (worktrees, `kb/<id>` branches, merges into
+This mod runs programs on your machine: `git` (worktrees, `ns/<id>` branches, merges into
 your checked-out branch), `mkdir`, `test` and `hc` (to start agents with your templates).
-It writes `<repo>/.herdr/kanban.json` and worktrees under `<worktrees>`. It never reaches
+It writes `<repo>/.herdr/nightshift.json` and worktrees under `<worktrees>`. It never reaches
 the network itself.
 
-**Anything that can write `.herdr/kanban.json` can queue tasks for your agents**, and a
+**Anything that can write `.herdr/nightshift.json` can queue tasks for your agents**, and a
 card runs with whatever permissions its template has. If a template lets an agent run
 commands without asking, a card in that file is a command on your machine once someone
 starts it. Only start cards you read, and keep `.herdr/` out of shared or untrusted
@@ -113,11 +113,11 @@ checkouts. Card ids must match `[a-z0-9_-]{1,24}` and templates must exist in
 ## Develop
 
 The board rules (parsing, merging, dependencies, columns, drag rules) live in
-[`mods/kanban/logic.js`](mods/kanban/logic.js) with no Herdr calls, so they run under Node:
+[`mods/nightshift/logic.js`](mods/nightshift/logic.js) with no Herdr calls, so they run under Node:
 
 ```sh
 npm test
-herdr-app check mods/kanban
+herdr-app check mods/nightshift
 ```
 
 ## License
