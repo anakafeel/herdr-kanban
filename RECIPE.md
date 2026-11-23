@@ -1,0 +1,89 @@
+# Kanban
+
+A board pane for one git repo. Each card is a task for a coding agent: pick an `hc`
+template, press Run, and the agent works in its own git worktree while the card moves
+from To do through Running to Review on its own. The person approves each start and
+decides when a card is Done.
+
+![Kanban](preview.png)
+
+## What you see
+
+Top to bottom, on `surface`, 10px padding, 8px gaps:
+
+- **Header:** "Kanban" at 14px semibold, then the repo's root folder at 11px `dim`,
+  truncated.
+- **New card row:** a text input (flex, 30px tall, 8px side padding, 7px radius, 1px
+  `input` border, `background` fill, 12.5px text, placeholder "New task for a helper…"),
+  a small template button in `accent` text showing the template that new cards get,
+  and an "Add" button.
+- **Error line** (only when there is one): 11px `blocked` text ending in
+  "(click to dismiss)".
+- **Four equal columns** filling the rest, 8px apart: "To do", "Running", "Review",
+  "Done". Each is a `canvas` panel, 8px radius, 6px padding, scrolling vertically, titled
+  "<Name> · <count>" at 11.5px semibold `muted`.
+- **Cards:** `raised` fill, 7px radius, 1px `border` outline, 8px padding. The task text
+  at 12.5px; under it a 10.5px `dim` line: template, branch (`kb/<id>`) once started, and
+  the agent's status word in that status's theme color. Below that, small buttons
+  (11px, 1px `input` border, 5px radius, `hover` fill on hover).
+
+## How it behaves
+
+- **Add** (or Enter in the input) appends a To do card with the selected template.
+  Clicking the header's template button cycles through `hc templates` in order.
+- **To do card:** a template button (accent; cycles that card's template), **Run**, and
+  **✕** (delete, `dim`).
+- **Run:** the card goes to Running at once. In a git repo the mod runs
+  `git worktree add -b kb/<id> ~/.herdr/worktrees/<repo>/kb-<id>`, then
+  `hc run --bg --name kb-<id> --cwd <worktree> <template> "<task>\n\nWork only in
+  <worktree>. Commit your changes on the current branch when done."`, and stores the
+  returned terminal address. Outside git it runs in the folder itself. A failure puts the
+  card back in To do and shows the error as a line and a notification.
+- **Running card:** status comes live from `terminals()` by the name `kb-<id>`.
+  `working` shows in the working color; `blocked` turns the card border `blocked` and
+  the word "needs you". **Open** peeks at the terminal (`terminal.peek`).
+- **Review:** a running card shows here once its agent reports `done`, or `idle` after
+  its first turn, or its terminal is gone. Buttons: **Open**, **Done** (kills the
+  terminal, card to Done), **Back** (`dim`, card to To do).
+- **Done card:** only **✕**.
+- The board re-reads its file every 3 s and redraws when another program changed it.
+  `herdr-app do kanban.run` starts the oldest To do card.
+
+## Built from
+
+- One mod, `mods/kanban/` (`main.js`, `mod.json` with `"place": "none"`), opened as a tab
+  or split: `tab.new {mod: "kanban", props: {folder?}}`. Without `props.folder` it uses
+  `focused().cwd`, else the active space's folder, else `home()`.
+- Repo root from `exec("git", ["rev-parse", "--show-toplevel"])`. Cards are stored in
+  `<root>/.herdr/kanban.json` as `{"cards": [{id, task, template, status, terminal?,
+  branch?, worktree?}]}`, where `status` is `todo | running | review | done` and `id` is
+  `Date.now().toString(36)`.
+- `herdr` calls: `exec`, `hc(["templates", "--json"])`, `hc(["run", ...])`,
+  `readTextFile`, `writeTextFile` (with the last text read as `expected`), `terminals()`,
+  `focused()`, `spaces()`, `home()`, `notify`, `nextCommand`, `checking`, `theme`, and
+  `run("terminal.peek")` / `run("terminal.kill")`. `InputState` + `Input` from
+  `gpui-base` for the input.
+- Programs run: `git`, `mkdir`, `hc`.
+
+## Watch out
+
+- Right after Run, `hc run` has not returned yet, so there is no terminal. Treat a
+  running card with no stored address as still Running, or it jumps to Review at once.
+- `writeTextFile` rejects a stale snapshot. On rejection, reload the file and show the
+  error instead of overwriting another writer's cards.
+- `nextCommand()` gives a bare string, no arguments.
+- Guard `init` with `checking()`: `herdr-app check` runs it for real.
+- `hc` must be on the PATH Herdr starts programs with, and templates must exist
+  (`hc templates`). Without any, the board falls back to `gemini`.
+- It does not merge branches, remove worktrees, or chain cards.
+
+## Done when
+
+- `herdr-app check mods/kanban` passes.
+- Opened on a git repo, the board shows the repo path and every `hc` template on the
+  template button.
+- A card added and Run creates `~/.herdr/worktrees/<repo>/kb-<id>` on branch `kb/<id>`,
+  shows in Running with the agent's live status, and lands in Review when the agent
+  stops, with the agent's commit on `kb/<id>`.
+- A card written into `.herdr/kanban.json` by another program appears within 3 s.
+- Done closes the agent's terminal.
