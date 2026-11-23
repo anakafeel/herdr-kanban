@@ -5,7 +5,7 @@
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import { exec, hc, home, props, focused, spaces, terminals, settings, run, theme, readTextFile, writeTextFile, notify, checking, nextCommand } from "herdr";
-import { COLUMNS, helperName, branchName, parseCards, mergeCards, waitingOn, isReady, columnFor, nextOf, dropAction, applyDrop } from "./logic.js";
+import { COLUMNS, helperName, branchName, parseCards, mergeCards, waitingOn, isReady, columnFor, nextOf, dropAction, applyDrop, mergeFailure } from "./logic.js";
 
 export default class Kanban extends View {
   init(_props, cx) {
@@ -220,10 +220,13 @@ export default class Kanban extends View {
       const opts = { cwd: this.root };
       const dirty = await exec("git", ["status", "--porcelain", "--untracked-files=no"], opts);
       if (dirty.stdout.trim()) return `Not merging: ${this.base} has uncommitted changes. Commit or stash them first.`;
+      // --no-ff makes a merge commit, which needs a committer.
+      const who = await exec("git", ["config", "user.email"], opts);
+      if (!who.stdout.trim()) return `Not merging: git has no user.email in ${this.root}, and the merge commit needs one. Run: git config --global user.name "Your Name" && git config --global user.email you@example.com`;
       const m = await exec("git", ["merge", "--no-ff", "--no-edit", branchName(id)], opts);
       if (m.code !== 0) {
         await exec("git", ["merge", "--abort"], opts);
-        return `Merge of ${branchName(id)} stopped (conflict?), nothing changed: ${(m.stderr || m.stdout).trim().split("\n").pop()}`;
+        return mergeFailure(`${m.stdout}\n${m.stderr}`, branchName(id));
       }
       this.stop(id);
       const c = this.card(id);

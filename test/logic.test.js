@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseCards, mergeCards, waitingOn, isReady, columnFor, nextOf, dropAction, applyDrop } from "../mods/kanban/logic.js";
+import { parseCards, mergeCards, waitingOn, isReady, columnFor, nextOf, dropAction, applyDrop, mergeFailure } from "../mods/kanban/logic.js";
 
 const card = (id, status = "todo", extra = {}) => ({ id, task: `t ${id}`, template: "gemini", status, ...extra });
 
@@ -98,4 +98,12 @@ test("applyDrop moves Review back to To do at the drop point, and refuses Runnin
   const refused = applyDrop(cards, "w", "done", null);
   assert.equal(refused.cards, cards);
   assert.equal(refused.result.ok, false);
+});
+
+test("mergeFailure names conflicts and git's own reason", () => {
+  assert.match(mergeFailure("Auto-merging a.txt\nCONFLICT (content): Merge conflict in a.txt\n", "kb/a"), /kb\/a conflicts/);
+  assert.equal(
+    mergeFailure("\n*** Please tell me who you are.\n\nfatal: unable to auto-detect email address (got 'x@y.(none)')\n", "kb/a"),
+    "Merge of kb/a failed, nothing changed: unable to auto-detect email address (got 'x@y.(none)')");
+  assert.equal(mergeFailure("", "kb/a"), "Merge of kb/a failed, nothing changed: git gave no reason");
 });

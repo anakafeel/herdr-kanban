@@ -96,3 +96,11 @@ export function applyDrop(cards, id, to, beforeId) {
   }
   return { cards: next, result };
 }
+
+// A person-readable reason from a failed `git merge` (after it was aborted).
+export function mergeFailure(output, branch) {
+  if (/CONFLICT/.test(output)) return `${branch} conflicts with your branch, so the merge was aborted and nothing changed. Merge it by hand to resolve.`;
+  const lines = output.trim().split("\n").map((l) => l.trim()).filter(Boolean);
+  const why = lines.find((l) => /^(fatal|error):/.test(l)) ?? lines.at(-1) ?? "git gave no reason";
+  return `Merge of ${branch} failed, nothing changed: ${why.replace(/^(fatal|error):\s*/, "")}`;
+}
