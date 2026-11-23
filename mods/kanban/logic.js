@@ -7,18 +7,23 @@ export const ID = /^[a-z0-9_-]{1,24}$/; // hc --name takes 1-32 of a-z 0-9 - _, 
 export const helperName = (id) => `kb-${id}`;
 export const branchName = (id) => `kb/${id}`;
 
+const positive = (n) => (Number.isInteger(n) && n > 0 ? n : null);
+
 // Cards and settings from the board file's text. Throws on bad JSON; drops cards with a bad
-// id, task or status. `maxRunning` is how many agents may run at once (null: no limit).
+// id, task or status. Settings: `maxRunning` agents at once, `timeoutMinutes` per agent
+// (null: no limit for either), and `autoMerge` finished cards.
 export function parseCards(text) {
   const data = text ? JSON.parse(text) : {};
   const raw = data.cards ?? [];
-  const maxRunning = Number.isInteger(data.maxRunning) && data.maxRunning > 0 ? data.maxRunning : null;
+  const maxRunning = positive(data.maxRunning);
+  const timeoutMinutes = positive(data.timeoutMinutes);
+  const autoMerge = data.autoMerge === true;
   const cards = raw.filter((c) => c && ID.test(c.id) && typeof c.task === "string" && STATUSES.has(c.status));
   for (const c of cards) {
     if (Array.isArray(c.after)) c.after = c.after.filter((a) => typeof a === "string" && a !== c.id);
     else delete c.after;
   }
-  return { cards, skipped: raw.length - cards.length, maxRunning };
+  return { cards, skipped: raw.length - cards.length, maxRunning, timeoutMinutes, autoMerge };
 }
 
 // Another writer changed the file: keep their cards, ours win for ids both have,
@@ -125,4 +130,17 @@ export function mergeFailure(output, branch) {
   const lines = output.trim().split("\n").map((l) => l.trim()).filter(Boolean);
   const why = lines.find((l) => /^(fatal|error):/.test(l)) ?? lines.at(-1) ?? "git gave no reason";
   return `Merge of ${branch} failed, nothing changed: ${why.replace(/^(fatal|error):\s*/, "")}`;
+}
+
+// A running card whose agent has worked longer than the board's timeout.
+export function isTimedOut(card, now, timeoutMinutes) {
+  return Boolean(timeoutMinutes) && card.status === "running" && typeof card.startedAt === "number"
+    && now - card.startedAt > timeoutMinutes * 60_000;
+}
+
+// A card that just finished on its own and should merge by itself: never after a timeout or a
+// manual stop (partial work), and only one try.
+export function shouldAutoMerge(card, autoMerge) {
+  return autoMerge && card.status === "review" && Boolean(card.branch) && card.finished === true
+    && !card.merged && !card.autoMergeTried;
 }

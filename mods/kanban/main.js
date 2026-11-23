@@ -5,7 +5,7 @@
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import { exec, hc, home, props, focused, spaces, terminals, settings, run, theme, readTextFile, writeTextFile, notify, checking, nextCommand } from "herdr";
-import { COLUMNS, helperName, branchName, parseCards, mergeCards, waitingOn, isReady, columnFor, nextOf, dropAction, applyDrop, mergeFailure, startable } from "./logic.js";
+import { COLUMNS, helperName, branchName, parseCards, mergeCards, waitingOn, isReady, columnFor, nextOf, dropAction, applyDrop, mergeFailure, startable, isTimedOut, shouldAutoMerge } from "./logic.js";
 
 export default class Kanban extends View {
   init(_props, cx) {
@@ -20,6 +20,8 @@ export default class Kanban extends View {
     this.template = "gemini";
     this.base = null;          // the branch checked out in the repo, where Merge lands
     this.maxRunning = null;    // how many agents may run at once (null: no limit), saved in the board file
+    this.timeoutMinutes = null; // stop an agent after this long (null: never), saved in the board file
+    this.autoMerge = false;    // merge cards whose agent finished on its own, saved in the board file
     this.press = null;         // {id, x, y}: a card pressed, not yet dragged
     this.drag = null;          // {id, x, y}: the card being dragged, pointer in board coordinates
     this.over = null;          // {col, before}: where it would drop
@@ -74,9 +76,9 @@ export default class Kanban extends View {
 
   apply(text) {
     try {
-      const { cards, skipped, maxRunning } = parseCards(text);
+      const { cards, skipped, maxRunning, timeoutMinutes, autoMerge } = parseCards(text);
       this.cards = cards;
-      this.maxRunning = maxRunning;
+      Object.assign(this, { maxRunning, timeoutMinutes, autoMerge });
       this.broken = false;
       if (skipped) this.error = `Skipped ${skipped} invalid card(s) in ${this.file}`;
     } catch (e) {
@@ -103,15 +105,15 @@ export default class Kanban extends View {
           if (tries > 3) throw new Error("the file keeps changing");
           this.dirty = false;
           if (this.fileText === null) await exec("mkdir", ["-p", `${this.root}/.herdr`]);
-          const text = JSON.stringify({ ...(this.maxRunning ? { maxRunning: this.maxRunning } : {}), cards: this.cards }, null, 2) + "\n";
+          const text = JSON.stringify({ ...this.settings(), cards: this.cards }, null, 2) + "\n";
           try {
             await writeTextFile(this.file, text, this.fileText);
             this.fileText = text;
           } catch {
             const ours = this.cards;
-            const oursMax = this.maxRunning;
+            const oursSettings = { maxRunning: null, timeoutMinutes: null, autoMerge: false, ...this.settings() };
             this.apply(await readTextFile(this.file));
-            if (!this.broken) Object.assign(this, { cards: mergeCards(ours, this.cards, this.removed), maxRunning: oursMax });
+            if (!this.broken) Object.assign(this, oursSettings, { cards: mergeCards(ours, this.cards, this.removed) });
             this.dirty = true;
           }
         }
@@ -182,6 +184,8 @@ export default class Kanban extends View {
         if (!c) return; // removed while starting
         if (this.git) Object.assign(c, { branch: branchName(id), worktree: cwd });
         c.terminal = JSON.parse(r.stdout).address;
+        c.startedAt = Date.now();
+        for (const k of ["finished", "timedOut", "autoMergeTried"]) delete c[k];
         this.save(cx);
       } catch (e) {
         this.fail(id, `Run failed: ${e.message ?? e}`, cx);
@@ -275,11 +279,36 @@ export default class Kanban extends View {
     return columnFor(card, this.live(card));
   }
 
-  // Saves cards whose helper finished as Review.
+  // The board's settings as saved in its file (defaults left out).
+  settings() {
+    return {
+      ...(this.maxRunning ? { maxRunning: this.maxRunning } : {}),
+      ...(this.timeoutMinutes ? { timeoutMinutes: this.timeoutMinutes } : {}),
+      ...(this.autoMerge ? { autoMerge: true } : {}),
+    };
+  }
+
+  // Moves finished agents to Review, stops agents past the timeout, and merges finished cards
+  // when auto-merge is on.
   promote(cx) {
     let changed = false;
+    const now = Date.now();
     for (const c of this.cards) {
-      if (c.status === "running" && this.column(c) === "review") { c.status = "review"; changed = true; }
+      if (isTimedOut(c, now, this.timeoutMinutes)) {
+        this.stop(c.id);
+        Object.assign(c, { status: "review", timedOut: true, finished: false });
+        changed = true;
+      } else if (c.status === "running" && this.column(c) === "review") {
+        Object.assign(c, { status: "review", finished: true });
+        changed = true;
+      }
+    }
+    for (const c of this.cards) {
+      if (shouldAutoMerge(c, this.autoMerge)) {
+        c.autoMergeTried = true;
+        changed = true;
+        this.merge(c.id, cx);
+      }
     }
     if (changed) this.save(cx);
   }
@@ -365,6 +394,7 @@ export default class Kanban extends View {
           .child(c.template)
           .when(Boolean(c.branch), (el) => el.child(c.branch))
           .when(Boolean(c.merged), (el) => el.child(div().text_color(t.done).child("merged")))
+          .when(Boolean(c.timedOut), (el) => el.child(div().text_color(t.blocked).child("timed out")))
           .when(Boolean(status), (el) => el.child(div().text_color(t[status] ?? t.dim).child(status === "blocked" ? "needs you" : status))))
         .when(col === "todo" && waits.length > 0, (el) => el.child(div().pt(4).text_size(10.5).text_color(t.muted).truncate()
           .child(`waits for: ${waits.map((w) => w.task).join(", ")}`)))
@@ -395,16 +425,24 @@ export default class Kanban extends View {
       .on_hover((hovered, cx) => { if (!hovered && this.drag) { this.press = this.drag = this.over = null; cx.notify(); } })
       .child(h_flex().gap(8).items_center()
         .child(div().text_size(14).font_semibold().child("Kanban"))
-        .child(div().flex_1().truncate().text_size(11).text_color(t.dim).child(this.root ?? "")))
-      .child(h_flex().gap(6).items_center()
-        .child(Input.new(this.input).flex_1().h(30).px(8).rounded(7).border_1().border_color(t.input).bg(t.background).text_size(12.5))
-        .child(btn("tpl", this.template, (cx) => { this.template = nextOf(this.templates, this.template); cx.notify(); }, t.accent))
-        .child(btn("add", "Add", (cx) => this.add(cx)))
+        .child(div().flex_1().truncate().text_size(11).text_color(t.dim).child(this.root ?? ""))
         .child(btn("max", `max running ${this.maxRunning ?? "∞"}`, (cx) => {
           this.maxRunning = nextOf([null, 1, 2, 3, 4], this.maxRunning);
           this.save(cx);
           this.schedule(cx);
-        }, t.dim)))
+        }, t.dim))
+        .child(btn("timeout", `timeout ${this.timeoutMinutes ? `${this.timeoutMinutes}m` : "off"}`, (cx) => {
+          this.timeoutMinutes = nextOf([null, 15, 30, 60], this.timeoutMinutes);
+          this.save(cx);
+        }, t.dim))
+        .child(btn("automerge", `auto-merge ${this.autoMerge ? "on" : "off"}`, (cx) => {
+          this.autoMerge = !this.autoMerge;
+          this.save(cx);
+        }, this.autoMerge ? t.accent : t.dim)))
+      .child(h_flex().gap(6).items_center()
+        .child(Input.new(this.input).flex_1().h(30).px(8).rounded(7).border_1().border_color(t.input).bg(t.background).text_size(12.5))
+        .child(btn("tpl", this.template, (cx) => { this.template = nextOf(this.templates, this.template); cx.notify(); }, t.accent))
+        .child(btn("add", "Add", (cx) => this.add(cx))))
       .when(Boolean(this.error), (el) => el.child(div().id("err").text_size(11).text_color(t.blocked).cursor_pointer()
         .on_click((_e, cx) => { this.error = null; cx.notify(); }).child(`${this.error}  (click to dismiss)`)))
       .child(h_flex().flex_1().min_h(0).gap(8).items_start().children(COLUMNS.map(([k, label]) =>

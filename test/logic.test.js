@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseCards, mergeCards, waitingOn, isReady, columnFor, nextOf, dropAction, applyDrop, mergeFailure, startable } from "../mods/kanban/logic.js";
+import { parseCards, mergeCards, waitingOn, isReady, columnFor, nextOf, dropAction, applyDrop, mergeFailure, startable, isTimedOut, shouldAutoMerge } from "../mods/kanban/logic.js";
 
 const card = (id, status = "todo", extra = {}) => ({ id, task: `t ${id}`, template: "gemini", status, ...extra });
 
@@ -12,7 +12,7 @@ test("parseCards keeps valid cards and counts the rest", () => {
 });
 
 test("parseCards treats a missing file as empty and throws on bad JSON", () => {
-  assert.deepEqual(parseCards(null), { cards: [], skipped: 0, maxRunning: null });
+  assert.deepEqual(parseCards(null), { cards: [], skipped: 0, maxRunning: null, timeoutMinutes: null, autoMerge: false });
   assert.throws(() => parseCards("{ broken"));
 });
 
@@ -136,4 +136,32 @@ test("mergeFailure names conflicts and git's own reason", () => {
     mergeFailure("\n*** Please tell me who you are.\n\nfatal: unable to auto-detect email address (got 'x@y.(none)')\n", "kb/a"),
     "Merge of kb/a failed, nothing changed: unable to auto-detect email address (got 'x@y.(none)')");
   assert.equal(mergeFailure("", "kb/a"), "Merge of kb/a failed, nothing changed: git gave no reason");
+});
+
+test("parseCards reads timeoutMinutes and autoMerge", () => {
+  const r = parseCards(JSON.stringify({ cards: [], timeoutMinutes: 30, autoMerge: true }));
+  assert.equal(r.timeoutMinutes, 30);
+  assert.equal(r.autoMerge, true);
+  const bad = parseCards(JSON.stringify({ cards: [], timeoutMinutes: -5, autoMerge: "yes" }));
+  assert.equal(bad.timeoutMinutes, null);
+  assert.equal(bad.autoMerge, false);
+});
+
+test("isTimedOut only for running cards past the limit", () => {
+  const now = 10 * 60_000;
+  assert.equal(isTimedOut(card("a", "running", { startedAt: 0 }), now, 5), true);
+  assert.equal(isTimedOut(card("a", "running", { startedAt: 0 }), now, 15), false);
+  assert.equal(isTimedOut(card("a", "running", { startedAt: 0 }), now, null), false);
+  assert.equal(isTimedOut(card("a", "running"), now, 5), false); // no start time yet
+  assert.equal(isTimedOut(card("a", "review", { startedAt: 0 }), now, 5), false);
+});
+
+test("shouldAutoMerge only for cards that finished on their own, once", () => {
+  const done = card("a", "review", { branch: "kb/a", finished: true });
+  assert.equal(shouldAutoMerge(done, true), true);
+  assert.equal(shouldAutoMerge(done, false), false);
+  assert.equal(shouldAutoMerge({ ...done, finished: false }, true), false); // stopped or timed out
+  assert.equal(shouldAutoMerge({ ...done, autoMergeTried: true }, true), false);
+  assert.equal(shouldAutoMerge({ ...done, merged: true }, true), false);
+  assert.equal(shouldAutoMerge({ ...done, branch: undefined }, true), false);
 });

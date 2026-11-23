@@ -81,6 +81,14 @@ Top to bottom, on `surface`, 10px padding, 8px gaps:
   "queued · starts when a slot frees", with **Unqueue** and **✕**. The header's
   **max running ∞|1|2|3|4** button cycles the limit and saves it as `maxRunning`.
 
+- **Timeout:** the title row's **timeout off|15m|30m|60m** button saves `timeoutMinutes`.
+  Every 3 s, a running card older than that (`startedAt`, set when its agent starts) has its
+  agent killed and goes to Review with `timedOut: true` ("timed out" in `blocked` color).
+- **Auto-merge:** the title row's **auto-merge off|on** button saves `autoMerge`. A card that
+  reaches Review because its agent finished (`finished: true`, never after a timeout or a
+  manual stop) runs Merge once (`autoMergeTried`); a failure leaves it in Review with the
+  reason. The three settings sit right of the repo path in the title row.
+
 ## Built from
 
 - One mod, `mods/kanban/` (`main.js`, `mod.json` with `"place": "none"`), opened as a tab
@@ -128,7 +136,8 @@ Top to bottom, on `surface`, 10px padding, 8px gaps:
 - Before `hc run`, `hc kill kb-<id>`: a helper stopped a moment ago may still hold the name.
 - Run again from Review sets the card back to To do first, so `isReady` lets it start.
 - `kanban.run` drops the first ready To do card on Running, so it may queue.
-- Saving keeps `maxRunning` beside `cards`; a merge after a stale write keeps ours.
+- Saving keeps `maxRunning`, `timeoutMinutes` and `autoMerge` beside `cards` (defaults left
+  out); a merge after a stale write keeps ours.
 
 ## Done when
 

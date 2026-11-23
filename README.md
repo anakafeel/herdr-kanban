@@ -1,23 +1,33 @@
 # herdr-kanban
 
-A Kanban board for [Herdr](https://herdr.dev) that hands each card to a coding agent.
+**A queue for your coding agents, inside [Herdr](https://herdr.dev).** Line up a batch of
+cards, walk away, and come back to a Review column: herdr-kanban runs them N at a time, in
+order, each in its own git worktree, on the agent you pick per card. A local model takes the
+easy ones, Claude the hard ones.
 
-![herdr-kanban: four coding agents, one board](launch.gif)
+![herdr-kanban: line up the cards, your agents work the queue](launch.gif)
 
 **A real run**, recorded in Herdr: three cards, Gemini and Copilot agents, a queued card that
 starts by itself, merged into `main`.
 
 ![A real run: cards dragged to Running, a queued card, Merge into main](demo.gif)
 
-Write a task, pick an agent, and drag the card to **Running**. The board makes a git
-worktree on its own branch, starts the agent there with `hc run`, and moves the card to
-**Review** when the agent is done. Review the branch, merge it from the card, clean up.
-Any `hc` template works: Claude Code, Gemini, Copilot, OpenCode on a local model,
-whatever you have set up.
+## Built for unattended batches
 
-Inspired by [Vibe Kanban](https://github.com/BloopAI/vibe-kanban), but native to Herdr:
-the agents are ordinary herdr-core terminals, so you can watch, steer or take over any of
-them, and they follow your own `hc` templates instead of a separate agent setup.
+- **Running is a queue.** Drop cards on Running; they start as slots free up. **max running**
+  caps how many agents work at once: 1 for a single local model, 2 or 3 to spread quota.
+- **Chains.** A card can wait for another; it starts by itself once that one is Done.
+- **Any agent, per card.** Every card picks one of your `hc` templates: Claude Code, Gemini,
+  Copilot, OpenCode on a local model.
+- **Timeout.** An agent that runs too long is stopped and its card goes to Review, marked
+  "timed out", so one stuck card can't hold the queue.
+- **Auto-merge** (off by default). A card whose agent finished on its own merges into your
+  branch; a conflict aborts cleanly and leaves the card in Review for you.
+- **Isolated.** Each card works in its own worktree on `kb/<id>`, never in your checkout.
+- **Watchable.** Agents are ordinary herdr-core terminals: open one mid-task, steer it, take over.
+
+Inspired by [Vibe Kanban](https://github.com/BloopAI/vibe-kanban), but native to Herdr and
+built around running a queue of work, not one card at a time.
 
 ## Install
 
@@ -68,6 +78,7 @@ Every move also has a button on the card:
   other cards or every slot is taken: then it's queued ("queued · starts after …") and
   starts by itself as soon as it can, in queue order. **max running** in the header sets
   the slots (∞, 1 to 4), handy for a single local model or to cap parallel quota use.
+- **timeout** (off, 15, 30, 60 min) and **auto-merge** (off, on) sit beside it.
 - **Chained cards** show "waits for …" and start only once those cards are Done.
 - **Merge** runs `git merge --no-ff` into the branch checked out in your repo. It refuses
   when that checkout has uncommitted changes, and on a conflict it aborts, so nothing is
@@ -80,7 +91,7 @@ Agents work in `<worktrees>/<repo>/kb-<id>` on branch `kb/<id>`. `<worktrees>` i
 `worktrees.directory` setting, `~/.herdr/worktrees` by default. The worktree branches from
 your current commit, so commit first: the agent does not see uncommitted changes.
 
-Cards live in `<repo>/.herdr/kanban.json` (`{"maxRunning"?: n, "cards": [{id, task, template, status, after?}]}`).
+Cards live in `<repo>/.herdr/kanban.json` (`{"maxRunning"?: n, "timeoutMinutes"?: n, "autoMerge"?: true, "cards": [{id, task, template, status, after?}]}`).
 The board re-reads it every 3 s, so an orchestrating agent can plan work by writing cards
 into it, with `after` for order. `herdr-app do kanban.run` starts (or queues) the first ready To-do card
 on every open board, so keep one board per repo.
