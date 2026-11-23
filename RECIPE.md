@@ -34,17 +34,21 @@ Top to bottom, on `surface`, 10px padding, 8px gaps:
 - **To do card:** a template button (accent; cycles that card's template), **Run**, and
   **✕** (delete, `dim`).
 - **Run:** the card goes to Running at once. In a git repo the mod runs
-  `git worktree add -b kb/<id> ~/.herdr/worktrees/<repo>/kb-<id>`, then
-  `hc run --bg --name kb-<id> --cwd <worktree> <template> "<task>\n\nWork only in
+  `git worktree add -b kb/<id> <worktrees>/<repo>/kb-<id>` (`<worktrees>`: the
+  `worktrees.directory` setting, default `~/.herdr/worktrees`), then
+  `hc run --bg --json --name kb-<id> --cwd <worktree> <template> "<task>\n\nWork only in
   <worktree>. Commit your changes on the current branch when done."`, and stores the
   returned terminal address. Outside git it runs in the folder itself. A failure puts the
   card back in To do and shows the error as a line and a notification.
 - **Running card:** status comes live from `terminals()` by the name `kb-<id>`.
   `working` shows in the working color; `blocked` turns the card border `blocked` and
-  the word "needs you". **Open** peeks at the terminal (`terminal.peek`).
+  the word "needs you". **Open** (while the terminal lives) peeks at it
+  (`terminal.peek`); **Stop** (`dim`) kills it and puts the card back in To do.
 - **Review:** a running card shows here once its agent reports `done`, or `idle` after
-  its first turn, or its terminal is gone. Buttons: **Open**, **Done** (kills the
-  terminal, card to Done), **Back** (`dim`, card to To do).
+  its first turn, or its terminal is gone; the 3 s timer saves that move. Buttons:
+  **Open** (while the terminal lives), **Done** (kills the terminal, card to Done),
+  **Back** (`dim`, kills the terminal, card to To do). Run again reuses the card's
+  worktree, or its existing `kb/<id>` branch.
 - **Done card:** only **✕**.
 - The board re-reads its file every 3 s and redraws when another program changed it.
   `herdr-app do kanban.run` starts the oldest To do card.
@@ -63,18 +67,28 @@ Top to bottom, on `surface`, 10px padding, 8px gaps:
   `focused()`, `spaces()`, `home()`, `notify`, `nextCommand`, `checking`, `theme`, and
   `run("terminal.peek")` / `run("terminal.kill")`. `InputState` + `Input` from
   `gpui-base` for the input.
-- Programs run: `git`, `mkdir`, `hc`.
+- Card ids must match `^[a-z0-9_-]{1,24}$` (hc's `--name` limit minus `kb-`); cards
+  with a bad id, task or status are skipped with an error line. A template not in
+  `hc templates` fails at Run.
+- Programs run: `git`, `mkdir`, `test`, `hc`.
 
 ## Watch out
 
 - Right after Run, `hc run` has not returned yet, so there is no terminal. Treat a
   running card with no stored address as still Running, or it jumps to Review at once.
-- `writeTextFile` rejects a stale snapshot. On rejection, reload the file and show the
-  error instead of overwriting another writer's cards.
+- Saves must run one at a time: two overlapping `writeTextFile` calls make the second
+  stale. On a stale rejection, re-read the file, merge by card id (ours win, cards
+  deleted here stay deleted) and write again, a few tries at most.
+- If the file is not valid JSON, show the error and never write until it parses.
+- After an `await` in Run, find the card again by id: a reload may have replaced it.
+- Don't change cards in `render()`; promote to Review from the timer and save.
+- `SpaceInfo.folder` can be `""`: use `||`, not `??`, when picking the folder.
+- `hc run` needs `--json` for a parseable address.
 - `nextCommand()` gives a bare string, no arguments.
 - Guard `init` with `checking()`: `herdr-app check` runs it for real.
-- `hc` must be on the PATH Herdr starts programs with, and templates must exist
-  (`hc templates`). Without any, the board falls back to `gemini`.
+- `hc` must be on the PATH Herdr starts programs with. With no templates the board
+  falls back to `gemini`.
+- `kanban.run` reaches every open board copy.
 - It does not merge branches, remove worktrees, or chain cards.
 
 ## Done when
@@ -82,8 +96,9 @@ Top to bottom, on `surface`, 10px padding, 8px gaps:
 - `herdr-app check mods/kanban` passes.
 - Opened on a git repo, the board shows the repo path and every `hc` template on the
   template button.
-- A card added and Run creates `~/.herdr/worktrees/<repo>/kb-<id>` on branch `kb/<id>`,
+- A card added and Run creates `<worktrees>/<repo>/kb-<id>` on branch `kb/<id>`,
   shows in Running with the agent's live status, and lands in Review when the agent
   stops, with the agent's commit on `kb/<id>`.
 - A card written into `.herdr/kanban.json` by another program appears within 3 s.
-- Done closes the agent's terminal.
+- Done closes the agent's terminal; Back then Run reuses the same worktree.
+- A broken `.herdr/kanban.json` stays untouched and the board shows why.

@@ -40,21 +40,31 @@ herdr-app do tab.new '{"mod":"kanban","props":{"folder":"/path/to/repo"}}'
 | Column | What happens |
 |---|---|
 | **To do** | Type a task, pick a template (the button cycles through `hc templates`), **Add**. **Run** starts it. |
-| **Running** | The agent works in `~/.herdr/worktrees/<repo>/kb-<id>` on branch `kb/<id>`. A red border means it needs you; **Open** peeks at its terminal. |
-| **Review** | The agent stopped. Check its branch, then **Done** (closes its terminal) or **Back** (to To do). |
+| **Running** | The agent works in `<worktrees>/<repo>/kb-<id>` on branch `kb/<id>`. A border in your theme's "blocked" color means it needs you; **Open** peeks at its terminal, **Stop** ends it and puts the card back in To do. |
+| **Review** | The agent stopped. Check its branch, then **Done** (closes its terminal) or **Back** (to To do; Run again reuses the same branch and worktree). |
 | **Done** | Finished. Merge `kb/<id>` yourself. |
+
+`<worktrees>` is Herdr's `worktrees.directory` setting, `~/.herdr/worktrees` by default.
+The worktree branches from your current commit, so commit first: the agent does not see
+uncommitted changes.
 
 Cards live in `<repo>/.herdr/kanban.json`. The board re-reads it every 3 s, so an
 orchestrating agent can plan work by writing cards into it. `herdr-app do kanban.run`
-starts the oldest To-do card.
+starts the oldest To-do card on every open board, so keep one board per repo.
 
 ## What it runs
 
-This mod runs programs on your machine: `git` (to make worktrees) and `hc` (to start
-agents with your templates). It writes `<repo>/.herdr/kanban.json` and git worktrees under
-`~/.herdr/worktrees/`. It never reaches
-the network itself; the agents you start do whatever their templates allow, so give
-templates the permissions you are comfortable with.
+This mod runs programs on your machine: `git` (worktrees and `kb/<id>` branches in your
+repo), `mkdir`, `test` and `hc` (to start agents with your templates). It writes
+`<repo>/.herdr/kanban.json` and worktrees under `<worktrees>`. It never reaches the
+network itself.
+
+**Anything that can write `.herdr/kanban.json` can queue tasks for your agents**, and a
+card runs with whatever permissions its template has. If a template lets an agent run
+commands without asking, a card in that file is a command on your machine once someone
+presses Run. Only press Run on cards you read, and keep `.herdr/` out of shared or
+untrusted checkouts. Card ids must match `[a-z0-9_-]{1,24}` and templates must exist in
+`hc templates`; other cards are skipped.
 
 ## Not yet
 
