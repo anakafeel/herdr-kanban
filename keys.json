@@ -1,0 +1,5 @@
+{
+  "global": {
+    "alt-shift-b": { "command": "tab.new", "args": { "mod": "kanban", "name": "board" } }
+  }
+}

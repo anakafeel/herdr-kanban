@@ -52,6 +52,27 @@ Top to bottom, on `surface`, 10px padding, 8px gaps:
 - **Done card:** only **✕**.
 - The board re-reads its file every 3 s and redraws when another program changed it.
   `herdr-app do kanban.run` starts the oldest To do card.
+- **Drag:** press a card and move it more than 5px to pick it up. The card fades to 35%,
+  a 240px ghost (`raised`, `accent` border) follows the pointer, and every column shows
+  what dropping there does: an `accent` border and label when allowed, a `blocked` border
+  and the reason when refused, nothing when it's a no-op. Release to drop; leaving the
+  board cancels. Dropping in To do lands above the hovered card (lower half: below it),
+  since To do order is the run order. The rules (`dropAction` in `logic.js`):
+  To do → Running starts it (refused while it waits for a card), → Review refused
+  ("run it first"), → Done marks it done without an agent; Running → To do stops the
+  agent, → Review stops it for review, → Done refused ("still working"); Review → To do
+  back, → Running runs again on the same branch, → Done done; Done → To do reopens,
+  → Review reopens for review, → Running refused ("reopen first").
+- **Chain** (To do, not the first card): the card waits for the To do card above it
+  (`after: [id]`) and shows "waits for: <task>" in `muted`; Run hides until those cards
+  are Done. **Unchain** clears it.
+- **Merge into <branch>** (Review, when the card has a branch): refuses if
+  `git status --porcelain --untracked-files=no` is not empty; runs
+  `git merge --no-ff --no-edit kb/<id>`; on failure `git merge --abort` and shows why. On
+  success the card goes to Done, marked "merged" in `done` color.
+- **Clean up** (Done, while it has a worktree or branch): `git worktree remove` then
+  `git branch -d`, never forced; each refusal is shown and keeps what git kept.
+- While a git action runs, the card's buttons are replaced by "working on git…".
 
 ## Built from
 
@@ -71,6 +92,13 @@ Top to bottom, on `surface`, 10px padding, 8px gaps:
   with a bad id, task or status are skipped with an error line. A template not in
   `hc templates` fails at Run.
 - Programs run: `git`, `mkdir`, `test`, `hc`.
+- Pure rules in `mods/kanban/logic.js` (no Herdr imports): `parseCards`, `mergeCards`,
+  `waitingOn`, `isReady`, `columnFor`, `dropAction`, `applyDrop`, `nextOf`. Tested with
+  `node --test` in `test/logic.test.js`.
+- Drag is built from `on_mouse_down` on cards, `on_mouse_move` on the board, columns and
+  cards (`local_position` and `bounds` for the half), `on_mouse_up` and `on_hover(false)`
+  on the board, and an `absolute()` ghost; gpui-kit has no element drag and drop.
+- `keys.json` binds `alt-shift-b` to `tab.new {mod: "kanban", name: "board"}`.
 
 ## Watch out
 
@@ -90,6 +118,9 @@ Top to bottom, on `surface`, 10px padding, 8px gaps:
   falls back to `gemini`.
 - `kanban.run` reaches every open board copy.
 - It does not merge branches, remove worktrees, or chain cards.
+- Before `hc run`, `hc kill kb-<id>`: a helper stopped a moment ago may still hold the name.
+- Run again from Review sets the card back to To do first, so `isReady` lets it start.
+- `kanban.run` starts the first card that `isReady`, not merely the first To do card.
 
 ## Done when
 
@@ -102,3 +133,8 @@ Top to bottom, on `surface`, 10px padding, 8px gaps:
 - A card written into `.herdr/kanban.json` by another program appears within 3 s.
 - Done closes the agent's terminal; Back then Run reuses the same worktree.
 - A broken `.herdr/kanban.json` stays untouched and the board shows why.
+- `npm test` passes.
+- Dragging a waiting card to Running is refused with its reason; dragging a Running card
+  to Review stops its agent; dropping in To do above another card changes the order.
+- Merge with a dirty checkout is refused; a clean merge lands the commit and marks the card
+  merged; Clean up removes the worktree and the merged branch.

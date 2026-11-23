@@ -6,10 +6,11 @@ A Kanban board for [Herdr](https://herdr.dev) that hands each card to a coding a
 
 ![A real run: a card goes from To do to Review while a Gemini agent works in its own worktree](demo.gif)
 
-Write a task, pick an agent, press **Run**. The board makes a git worktree on its own
-branch, starts the agent there with `hc run`, and moves the card along as the agent works:
-**To do → Running → Review → Done**. Any `hc` template works: Claude Code, Gemini,
-Copilot, OpenCode on a local model, whatever you have set up.
+Write a task, pick an agent, and drag the card to **Running**. The board makes a git
+worktree on its own branch, starts the agent there with `hc run`, and moves the card to
+**Review** when the agent is done. Review the branch, merge it from the card, clean up.
+Any `hc` template works: Claude Code, Gemini, Copilot, OpenCode on a local model,
+whatever you have set up.
 
 Inspired by [Vibe Kanban](https://github.com/BloopAI/vibe-kanban), but native to Herdr:
 the agents are ordinary herdr-core terminals, so you can watch, steer or take over any of
@@ -27,11 +28,12 @@ cp -r herdr-kanban/mods/kanban ~/.config/herdr-app/mods/
 herdr-app check ~/.config/herdr-app/mods/kanban
 ```
 
-Add `.herdr/` to the `.gitignore` of repos you use it in.
+Then add the shortcut from [`keys.json`](keys.json) to your `~/.config/herdr-app/keys.json`
+(`alt-shift-b` opens a board), and `.herdr/` to the `.gitignore` of repos you use it in.
 
 ## Use
 
-Open a board for the repo of the focused terminal:
+Press `alt-shift-b`, or open a board for the repo of the focused terminal:
 
 ```sh
 herdr-app do tab.new '{"mod":"kanban"}'
@@ -39,40 +41,65 @@ herdr-app do tab.new '{"mod":"kanban"}'
 herdr-app do tab.new '{"mod":"kanban","props":{"folder":"/path/to/repo"}}'
 ```
 
-| Column | What happens |
+**Drag cards between columns.** While you drag, each column says what dropping there
+does, or why it can't:
+
+| From → To | To do | Running | Review | Done |
+|---|---|---|---|---|
+| **To do** | reorder (the run order) | start an agent | refused: run it first | done without an agent |
+| **Running** | stop the agent | | stop it and review its work | refused: still working |
+| **Review** | back (same branch next time) | run again on the same branch | | done |
+| **Done** | reopen | refused: reopen first | reopen for review | |
+
+Every move also has a button on the card:
+
+| Column | Buttons |
 |---|---|
-| **To do** | Type a task, pick a template (the button cycles through `hc templates`), **Add**. **Run** starts it. |
-| **Running** | The agent works in `<worktrees>/<repo>/kb-<id>` on branch `kb/<id>`. A border in your theme's "blocked" color means it needs you; **Open** peeks at its terminal, **Stop** ends it and puts the card back in To do. |
-| **Review** | The agent stopped. Check its branch, then **Done** (closes its terminal) or **Back** (to To do; Run again reuses the same branch and worktree). |
-| **Done** | Finished. Merge `kb/<id>` yourself. |
+| **To do** | template (cycles through `hc templates`), **Run**, **Chain** (wait for the card above), **✕** |
+| **Running** | **Open** (peek at the agent's terminal), **Stop** |
+| **Review** | **Open**, **Merge into `<branch>`**, **Done**, **Back** |
+| **Done** | **Clean up** (remove the worktree and branch), **✕** |
 
-`<worktrees>` is Herdr's `worktrees.directory` setting, `~/.herdr/worktrees` by default.
-The worktree branches from your current commit, so commit first: the agent does not see
-uncommitted changes.
+- **Chained cards** show "waits for …" and can't start until those cards are Done.
+- **Merge** runs `git merge --no-ff` into the branch checked out in your repo. It refuses
+  when that checkout has uncommitted changes, and on a conflict it aborts, so nothing is
+  left half-merged.
+- **Clean up** never forces: git keeps a worktree with uncommitted work and a branch that
+  isn't merged, and the board tells you which.
+- A card border in your theme's "blocked" color means its agent needs you.
 
-Cards live in `<repo>/.herdr/kanban.json`. The board re-reads it every 3 s, so an
-orchestrating agent can plan work by writing cards into it. `herdr-app do kanban.run`
-starts the oldest To-do card on every open board, so keep one board per repo.
+Agents work in `<worktrees>/<repo>/kb-<id>` on branch `kb/<id>`. `<worktrees>` is Herdr's
+`worktrees.directory` setting, `~/.herdr/worktrees` by default. The worktree branches from
+your current commit, so commit first: the agent does not see uncommitted changes.
+
+Cards live in `<repo>/.herdr/kanban.json` (`{"cards": [{id, task, template, status, after?}]}`).
+The board re-reads it every 3 s, so an orchestrating agent can plan work by writing cards
+into it, with `after` for order. `herdr-app do kanban.run` starts the first ready To-do card
+on every open board, so keep one board per repo.
 
 ## What it runs
 
-This mod runs programs on your machine: `git` (worktrees and `kb/<id>` branches in your
-repo), `mkdir`, `test` and `hc` (to start agents with your templates). It writes
-`<repo>/.herdr/kanban.json` and worktrees under `<worktrees>`. It never reaches the
-network itself.
+This mod runs programs on your machine: `git` (worktrees, `kb/<id>` branches, merges into
+your checked-out branch), `mkdir`, `test` and `hc` (to start agents with your templates).
+It writes `<repo>/.herdr/kanban.json` and worktrees under `<worktrees>`. It never reaches
+the network itself.
 
 **Anything that can write `.herdr/kanban.json` can queue tasks for your agents**, and a
 card runs with whatever permissions its template has. If a template lets an agent run
 commands without asking, a card in that file is a command on your machine once someone
-presses Run. Only press Run on cards you read, and keep `.herdr/` out of shared or
-untrusted checkouts. Card ids must match `[a-z0-9_-]{1,24}` and templates must exist in
+starts it. Only start cards you read, and keep `.herdr/` out of shared or untrusted
+checkouts. Card ids must match `[a-z0-9_-]{1,24}` and templates must exist in
 `hc templates`; other cards are skipped.
 
-## Not yet
+## Develop
 
-- Cards that wait on other cards.
-- Merging branches or removing worktrees for you.
-- A default key to open the board.
+The board rules (parsing, merging, dependencies, columns, drag rules) live in
+[`mods/kanban/logic.js`](mods/kanban/logic.js) with no Herdr calls, so they run under Node:
+
+```sh
+npm test
+herdr-app check mods/kanban
+```
 
 ## License
 
