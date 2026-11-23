@@ -74,6 +74,13 @@ Top to bottom, on `surface`, 10px padding, 8px gaps:
   `git branch -d`, never forced; each refusal is shown and keeps what git kept.
 - While a git action runs, the card's buttons are replaced by "working on git…".
 
+- **Queue:** `queued` is a status shown in Running. Dropping a card on Running (or Run,
+  labelled **Queue** when it would queue) queues it when it waits for cards that aren't Done
+  or when `maxRunning` agents already run. Every 3 s the board starts `startable` cards (ready,
+  in queue order, up to the free slots). Queued cards show "queued · starts after: …" or
+  "queued · starts when a slot frees", with **Unqueue** and **✕**. The header's
+  **max running ∞|1|2|3|4** button cycles the limit and saves it as `maxRunning`.
+
 ## Built from
 
 - One mod, `mods/kanban/` (`main.js`, `mod.json` with `"place": "none"`), opened as a tab
@@ -120,7 +127,8 @@ Top to bottom, on `surface`, 10px padding, 8px gaps:
 - It does not merge branches, remove worktrees, or chain cards.
 - Before `hc run`, `hc kill kb-<id>`: a helper stopped a moment ago may still hold the name.
 - Run again from Review sets the card back to To do first, so `isReady` lets it start.
-- `kanban.run` starts the first card that `isReady`, not merely the first To do card.
+- `kanban.run` drops the first ready To do card on Running, so it may queue.
+- Saving keeps `maxRunning` beside `cards`; a merge after a stale write keeps ours.
 
 ## Done when
 

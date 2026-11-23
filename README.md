@@ -46,21 +46,26 @@ does, or why it can't:
 
 | From → To | To do | Running | Review | Done |
 |---|---|---|---|---|
-| **To do** | reorder (the run order) | start an agent | refused: run it first | done without an agent |
+| **To do** | reorder (the run order) | start an agent, or queue it | refused: run it first | done without an agent |
 | **Running** | stop the agent | | stop it and review its work | refused: still working |
-| **Review** | back (same branch next time) | run again on the same branch | | done |
+| **Review** | back (same branch next time) | run again (or queue) on the same branch | | done |
 | **Done** | reopen | refused: reopen first | reopen for review | |
+| **Queued** (in Running) | take it out of the queue | reorder the queue | refused: it hasn't run yet | done without an agent |
 
 Every move also has a button on the card:
 
 | Column | Buttons |
 |---|---|
-| **To do** | template (cycles through `hc templates`), **Run**, **Chain** (wait for the card above), **✕** |
-| **Running** | **Open** (peek at the agent's terminal), **Stop** |
+| **To do** | template (cycles through `hc templates`), **Run** (or **Queue**), **Chain** (wait for the card above), **✕** |
+| **Running** | **Open** (peek at the agent's terminal), **Stop**; queued cards: **Unqueue**, **✕** |
 | **Review** | **Open**, **Merge into `<branch>`**, **Done**, **Back** |
 | **Done** | **Clean up** (remove the worktree and branch), **✕** |
 
-- **Chained cards** show "waits for …" and can't start until those cards are Done.
+- **Running is a queue.** A card dropped on Running starts at once, unless it waits for
+  other cards or every slot is taken: then it's queued ("queued · starts after …") and
+  starts by itself as soon as it can, in queue order. **max running** in the header sets
+  the slots (∞, 1 to 4), handy for a single local model or to cap parallel quota use.
+- **Chained cards** show "waits for …" and start only once those cards are Done.
 - **Merge** runs `git merge --no-ff` into the branch checked out in your repo. It refuses
   when that checkout has uncommitted changes, and on a conflict it aborts, so nothing is
   left half-merged.
@@ -72,9 +77,9 @@ Agents work in `<worktrees>/<repo>/kb-<id>` on branch `kb/<id>`. `<worktrees>` i
 `worktrees.directory` setting, `~/.herdr/worktrees` by default. The worktree branches from
 your current commit, so commit first: the agent does not see uncommitted changes.
 
-Cards live in `<repo>/.herdr/kanban.json` (`{"cards": [{id, task, template, status, after?}]}`).
+Cards live in `<repo>/.herdr/kanban.json` (`{"maxRunning"?: n, "cards": [{id, task, template, status, after?}]}`).
 The board re-reads it every 3 s, so an orchestrating agent can plan work by writing cards
-into it, with `after` for order. `herdr-app do kanban.run` starts the first ready To-do card
+into it, with `after` for order. `herdr-app do kanban.run` starts (or queues) the first ready To-do card
 on every open board, so keep one board per repo.
 
 ## What it runs

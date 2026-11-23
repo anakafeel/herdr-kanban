@@ -5,7 +5,7 @@
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import { exec, hc, home, props, focused, spaces, terminals, settings, run, theme, readTextFile, writeTextFile, notify, checking, nextCommand } from "herdr";
-import { COLUMNS, helperName, branchName, parseCards, mergeCards, waitingOn, isReady, columnFor, nextOf, dropAction, applyDrop, mergeFailure } from "./logic.js";
+import { COLUMNS, helperName, branchName, parseCards, mergeCards, waitingOn, isReady, columnFor, nextOf, dropAction, applyDrop, mergeFailure, startable } from "./logic.js";
 
 export default class Kanban extends View {
   init(_props, cx) {
@@ -19,6 +19,7 @@ export default class Kanban extends View {
     this.templates = ["gemini"];
     this.template = "gemini";
     this.base = null;          // the branch checked out in the repo, where Merge lands
+    this.maxRunning = null;    // how many agents may run at once (null: no limit), saved in the board file
     this.press = null;         // {id, x, y}: a card pressed, not yet dragged
     this.drag = null;          // {id, x, y}: the card being dragged, pointer in board coordinates
     this.over = null;          // {col, before}: where it would drop
@@ -57,14 +58,15 @@ export default class Kanban extends View {
         this.error = `Could not read ${this.file}: ${e.message ?? e}`;
       }
       this.promote(cx);
+      this.schedule(cx);
       cx.notify();
     }));
     // `herdr-app do kanban.run` starts the oldest To do card that waits for nothing.
     cx.spawn(async (cx) => {
       for (;;) {
         const c = await nextCommand();
-        const card = this.cards.find((x) => isReady(x, this.cards));
-        if (c === "run" && card) this.start(card.id, cx);
+        const card = this.cards.find((x) => x.status === "todo" && isReady(x, this.cards));
+        if (c === "run" && card) this.drop(card.id, "running", null, cx);
         cx.notify();
       }
     });
@@ -72,8 +74,9 @@ export default class Kanban extends View {
 
   apply(text) {
     try {
-      const { cards, skipped } = parseCards(text);
+      const { cards, skipped, maxRunning } = parseCards(text);
       this.cards = cards;
+      this.maxRunning = maxRunning;
       this.broken = false;
       if (skipped) this.error = `Skipped ${skipped} invalid card(s) in ${this.file}`;
     } catch (e) {
@@ -100,14 +103,15 @@ export default class Kanban extends View {
           if (tries > 3) throw new Error("the file keeps changing");
           this.dirty = false;
           if (this.fileText === null) await exec("mkdir", ["-p", `${this.root}/.herdr`]);
-          const text = JSON.stringify({ cards: this.cards }, null, 2) + "\n";
+          const text = JSON.stringify({ ...(this.maxRunning ? { maxRunning: this.maxRunning } : {}), cards: this.cards }, null, 2) + "\n";
           try {
             await writeTextFile(this.file, text, this.fileText);
             this.fileText = text;
           } catch {
             const ours = this.cards;
+            const oursMax = this.maxRunning;
             this.apply(await readTextFile(this.file));
-            if (!this.broken) this.cards = mergeCards(ours, this.cards, this.removed);
+            if (!this.broken) Object.assign(this, { cards: mergeCards(ours, this.cards, this.removed), maxRunning: oursMax });
             this.dirty = true;
           }
         }
@@ -291,7 +295,7 @@ export default class Kanban extends View {
   drop(id, to, beforeId, cx) {
     const card = this.card(id);
     if (!card) return;
-    const { cards, result } = applyDrop(this.cards, id, to, beforeId);
+    const { cards, result } = applyDrop(this.cards, id, to, beforeId, this.maxRunning);
     if (!result.ok) {
       if (result.reason) this.error = result.reason;
       return;
@@ -303,6 +307,11 @@ export default class Kanban extends View {
     if (card.status === "running" || card.status === "review") this.stop(id);
     this.cards = cards;
     this.save(cx);
+  }
+
+  // Starts queued cards that are ready, as slots allow.
+  schedule(cx) {
+    for (const c of startable(this.cards, this.maxRunning)) this.start(c.id, cx);
   }
 
   render() {
@@ -325,8 +334,11 @@ export default class Kanban extends View {
       if (busy) actions.child(div().text_size(11).text_color(t.dim).child("working on git…"));
       else if (col === "todo") actions
         .child(btn(`tp-${c.id}`, c.template, (cx) => { c.template = nextOf(this.templates, c.template); this.save(cx); }, t.accent))
-        .when(waits.length === 0, (el) => el.child(btn(`go-${c.id}`, "Run", (cx) => this.start(c.id, cx))))
+        .child(btn(`go-${c.id}`, dropAction(c, "running", this.cards, this.maxRunning).effect === "queue" ? "Queue" : "Run", (cx) => this.drop(c.id, "running", null, cx)))
         .when(i > 0 || Boolean(c.after?.length), (el) => el.child(btn(`ch-${c.id}`, c.after?.length ? "Unchain" : "Chain", (cx) => this.chain(c.id, list[i - 1], cx), t.dim)))
+        .child(btn(`rm-${c.id}`, "✕", (cx) => this.remove(c.id, cx), t.dim));
+      else if (c.status === "queued") actions
+        .child(btn(`uq-${c.id}`, "Unqueue", (cx) => this.drop(c.id, "todo", null, cx), t.dim))
         .child(btn(`rm-${c.id}`, "✕", (cx) => this.remove(c.id, cx), t.dim));
       else if (col === "running") actions
         .when(Boolean(helper), (el) => el.child(open()))
@@ -356,6 +368,8 @@ export default class Kanban extends View {
           .when(Boolean(status), (el) => el.child(div().text_color(t[status] ?? t.dim).child(status === "blocked" ? "needs you" : status))))
         .when(col === "todo" && waits.length > 0, (el) => el.child(div().pt(4).text_size(10.5).text_color(t.muted).truncate()
           .child(`waits for: ${waits.map((w) => w.task).join(", ")}`)))
+        .when(c.status === "queued", (el) => el.child(div().pt(4).text_size(10.5).text_color(t.muted).truncate()
+          .child(waits.length ? `queued · starts after: ${waits.map((w) => w.task).join(", ")}` : "queued · starts when a slot frees")))
         .child(actions);
     };
 
@@ -385,7 +399,12 @@ export default class Kanban extends View {
       .child(h_flex().gap(6).items_center()
         .child(Input.new(this.input).flex_1().h(30).px(8).rounded(7).border_1().border_color(t.input).bg(t.background).text_size(12.5))
         .child(btn("tpl", this.template, (cx) => { this.template = nextOf(this.templates, this.template); cx.notify(); }, t.accent))
-        .child(btn("add", "Add", (cx) => this.add(cx))))
+        .child(btn("add", "Add", (cx) => this.add(cx)))
+        .child(btn("max", `max running ${this.maxRunning ?? "∞"}`, (cx) => {
+          this.maxRunning = nextOf([null, 1, 2, 3, 4], this.maxRunning);
+          this.save(cx);
+          this.schedule(cx);
+        }, t.dim)))
       .when(Boolean(this.error), (el) => el.child(div().id("err").text_size(11).text_color(t.blocked).cursor_pointer()
         .on_click((_e, cx) => { this.error = null; cx.notify(); }).child(`${this.error}  (click to dismiss)`)))
       .child(h_flex().flex_1().min_h(0).gap(8).items_start().children(COLUMNS.map(([k, label]) =>

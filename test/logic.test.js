@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseCards, mergeCards, waitingOn, isReady, columnFor, nextOf, dropAction, applyDrop, mergeFailure } from "../mods/kanban/logic.js";
+import { parseCards, mergeCards, waitingOn, isReady, columnFor, nextOf, dropAction, applyDrop, mergeFailure, startable } from "../mods/kanban/logic.js";
 
 const card = (id, status = "todo", extra = {}) => ({ id, task: `t ${id}`, template: "gemini", status, ...extra });
 
@@ -12,7 +12,7 @@ test("parseCards keeps valid cards and counts the rest", () => {
 });
 
 test("parseCards treats a missing file as empty and throws on bad JSON", () => {
-  assert.deepEqual(parseCards(null), { cards: [], skipped: 0 });
+  assert.deepEqual(parseCards(null), { cards: [], skipped: 0, maxRunning: null });
   assert.throws(() => parseCards("{ broken"));
 });
 
@@ -65,6 +65,7 @@ test("dropAction follows the confirmed rules table", () => {
     running: { todo: "stop", running: undefined, review: "stop-review", done: null },
     review: { todo: "back", running: "run", review: undefined, done: "done" },
     done: { todo: "reopen", running: null, review: "reopen-review", done: undefined },
+    queued: { todo: "unqueue", running: "reorder", review: null, done: "done" },
   };
   for (const [from, row] of Object.entries(expect)) {
     for (const [to, effect] of Object.entries(row)) {
@@ -76,11 +77,40 @@ test("dropAction follows the confirmed rules table", () => {
   }
 });
 
-test("a waiting card can't be dragged to Running", () => {
+test("a waiting card dropped on Running is queued, not refused", () => {
   const cards = [card("a", "review"), card("b", "todo", { after: ["a"] })];
   const r = dropAction(cards[1], "running", cards);
-  assert.equal(r.ok, false);
-  assert.match(r.reason, /Waits for "t a"/);
+  assert.equal(r.effect, "queue");
+  assert.match(r.label, /starts after "t a"/);
+  assert.equal(applyDrop(cards, "b", "running", null).cards[1].status, "queued");
+});
+
+test("with every slot taken, a ready card is queued; with a free slot it runs", () => {
+  const cards = [card("r1", "running"), card("r2", "running"), card("x")];
+  assert.equal(dropAction(cards[2], "running", cards, 2).effect, "queue");
+  assert.equal(dropAction(cards[2], "running", cards, 3).effect, "run");
+  assert.equal(dropAction(cards[2], "running", cards, null).effect, "run");
+});
+
+test("startable fills free slots in queue order and skips waiting cards", () => {
+  const cards = [card("r", "running"), card("q1", "queued", { after: ["r"] }), card("q2", "queued"), card("q3", "queued")];
+  assert.deepEqual(startable(cards, 2).map((c) => c.id), ["q2"]);
+  assert.deepEqual(startable(cards, null).map((c) => c.id), ["q2", "q3"]);
+  assert.deepEqual(startable(cards, 1), []);
+  cards[0].status = "done";
+  assert.deepEqual(startable(cards, 2).map((c) => c.id), ["q1", "q2"]);
+});
+
+test("queued cards show in Running and reorder within the queue", () => {
+  assert.equal(columnFor(card("q", "queued"), undefined), "running");
+  const cards = [card("q1", "queued"), card("q2", "queued")];
+  assert.deepEqual(applyDrop(cards, "q2", "running", "q1").cards.map((c) => c.id), ["q2", "q1"]);
+});
+
+test("parseCards reads maxRunning and ignores bad values", () => {
+  assert.equal(parseCards(JSON.stringify({ cards: [], maxRunning: 2 })).maxRunning, 2);
+  assert.equal(parseCards(JSON.stringify({ cards: [], maxRunning: 0 })).maxRunning, null);
+  assert.equal(parseCards(JSON.stringify({ cards: [], maxRunning: "3" })).maxRunning, null);
 });
 
 test("applyDrop reorders To do and leaves running to the caller", () => {
