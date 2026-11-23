@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-labelledby="t d">
+  <title id="t">herdr-nightshift</title>
+  <desc id="d">A sheep asleep under a crescent moon on a night tile: your coding agents work the night shift.</desc>
+  <defs>
+    <clipPath id="tile"><rect x="64" y="64" width="896" height="896" rx="192"/></clipPath>
+    <mask id="crescent">
+      <rect width="1024" height="1024" fill="#fff"/>
+      <circle cx="808" cy="238" r="98" fill="#000"/>
+    </mask>
+  </defs>
+  <g clip-path="url(#tile)">
+    <rect x="64" y="64" width="896" height="896" fill="#151a24"/>
+    <!-- stars -->
+    <g fill="#e9e4d8" opacity="0.75">
+      <path d="M300 210 l9 25 25 9 -25 9 -9 25 -9 -25 -25 -9 25 -9z"/>
+      <path d="M470 150 l6 16 16 6 -16 6 -6 16 -6 -16 -16 -6 16 -6z"/>
+      <path d="M560 290 l5 13 13 5 -13 5 -5 13 -5 -13 -13 -5 13 -5z"/>
+    </g>
+    <!-- moon -->
+    <circle cx="752" cy="282" r="118" fill="#f3d27a" mask="url(#crescent)"/>
+    <!-- tucked legs -->
+    <g fill="#2e3136">
+      <rect x="452" y="742" width="40" height="66" rx="18"/>
+      <rect x="668" y="742" width="40" height="66" rx="18"/>
+    </g>
+    <!-- sleeping sheep: fleece -->
+    <g fill="#efeadf">
+      <circle cx="560" cy="640" r="150"/>
+      <circle cx="430" cy="668" r="118"/>
+      <circle cx="694" cy="664" r="122"/>
+      <circle cx="498" cy="540" r="108"/>
+      <circle cx="632" cy="532" r="112"/>
+      <circle cx="770" cy="602" r="92"/>
+      <rect x="330" y="640" width="520" height="140" rx="60"/>
+    </g>
+    <!-- head, resting on the fleece -->
+    <g transform="rotate(-12 318 632)">
+      <ellipse cx="318" cy="640" rx="104" ry="78" fill="#2e3136"/>
+      <ellipse cx="372" cy="560" rx="50" ry="24" fill="#2e3136" transform="rotate(-38 372 560)"/>
+      <circle cx="356" cy="586" r="34" fill="#efeadf"/>
+      <circle cx="320" cy="572" r="26" fill="#efeadf"/>
+      <!-- closed eye -->
+      <path d="M262 628 q22 20 46 0" fill="none" stroke="#efeadf" stroke-width="12" stroke-linecap="round"/>
+    </g>
+    <!-- z z, in herdr's terminal style -->
+    <g fill="none" stroke="#7aa2f7" stroke-width="13" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M214 474 h44 l-44 44 h44"/>
+      <path d="M158 398 h32 l-32 32 h32"/>
+    </g>
+  </g>
+</svg>

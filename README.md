@@ -1,3 +1,5 @@
+<img src="assets/icon-128.png" width="96" alt="herdr-nightshift icon: a sheep asleep under a crescent moon" align="right">
+
 # herdr-nightshift
 
 **Your coding agents work the night shift.** Line up a batch of cards in
