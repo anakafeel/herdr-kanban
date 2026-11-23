@@ -2,9 +2,12 @@
 
 A Kanban board for [Herdr](https://herdr.dev) that hands each card to a coding agent.
 
-![herdr-kanban](preview.png)
+![herdr-kanban: four coding agents, one board](launch.gif)
 
-![A real run: a card goes from To do to Review while a Gemini agent works in its own worktree](demo.gif)
+**A real run**, recorded in Herdr: three cards, Gemini and Copilot agents, a queued card that
+starts by itself, merged into `main`.
+
+![A real run: cards dragged to Running, a queued card, Merge into main](demo.gif)
 
 Write a task, pick an agent, and drag the card to **Running**. The board makes a git
 worktree on its own branch, starts the agent there with `hc run`, and moves the card to
