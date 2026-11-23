@@ -4,6 +4,8 @@ A Kanban board for [Herdr](https://herdr.dev) that hands each card to a coding a
 
 ![herdr-kanban](preview.png)
 
+![A real run: a card goes from To do to Review while a Gemini agent works in its own worktree](demo.gif)
+
 Write a task, pick an agent, press **Run**. The board makes a git worktree on its own
 branch, starts the agent there with `hc run`, and moves the card along as the agent works:
 **To do → Running → Review → Done**. Any `hc` template works: Claude Code, Gemini,
